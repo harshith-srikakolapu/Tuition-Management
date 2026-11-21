@@ -133,12 +133,3 @@ Measured with a real tuition center after _N_ weeks of daily use.
  
 Runs on free tiers for hosting, database, and CI. The only variable cost is per-message WhatsApp/SMS pricing, which is roughly ₹100 to ₹500 per month for a single center.
  
-## License
- 
-MIT. See [LICENSE](LICENSE).
- 
-## Author
- 
-**Your Name**
-[LinkedIn](https://linkedin.com/in/your-profile) | [Email](mailto:you@example.com)
- 
