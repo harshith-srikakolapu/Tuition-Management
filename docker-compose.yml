@@ -1,0 +1,40 @@
+# Full stack locally: docker compose up --build
+#   Web: http://localhost:8080   API: http://localhost:3000/api
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tuition_manager
+    ports: ['5433:5432'] # 5433 on the host so it doesn't clash with a local Postgres
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/tuition_manager?schema=public
+      SECRET_KEY: ${SECRET_KEY:-local-docker-secret}
+      CORS_ORIGIN: http://localhost:8080
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      WHATSAPP_TEMPLATE_BEFORE: ${WHATSAPP_TEMPLATE_BEFORE:-}
+      WHATSAPP_TEMPLATE_AFTER: ${WHATSAPP_TEMPLATE_AFTER:-}
+    ports: ['3000:3000']
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3000/api
+    ports: ['8080:80']
+    depends_on: [api]
+
+volumes:
+  pgdata:

@@ -1,0 +1,169 @@
+// Tuition Center Manager — data model
+// Amounts are whole rupees (Int). Calendar dates use @db.Date; months are "YYYY-MM" strings.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  OTHER
+}
+
+enum ReminderType {
+  BEFORE_DUE
+  AFTER_DUE
+}
+
+enum ReminderChannel {
+  WHATSAPP_API
+  WA_LINK
+}
+
+enum ReminderStatus {
+  PENDING // created, dispatch in progress
+  SENT // delivered via API, or owner confirmed a wa.me send
+  FAILED // API send failed; retried on next run
+  MANUAL // waiting for the owner to tap-to-send via wa.me
+  SKIPPED // owner dismissed it
+}
+
+model Center {
+  id               String     @id @default(cuid())
+  name             String
+  phone            String?
+  address          String?
+  upiId            String?
+  language         String     @default("en")
+  remindersEnabled Boolean    @default(true)
+  remindDaysBefore Int        @default(3)
+  remindDaysAfter  Int        @default(3)
+  createdAt        DateTime   @default(now())
+  users            User[]
+  batches          Batch[]
+  students         Student[]
+  payments         Payment[]
+  reminders        Reminder[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  centerId     String
+  center       Center   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Batch {
+  id                String    @id @default(cuid())
+  centerId          String
+  center            Center    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  name              String
+  schedule          String?
+  defaultMonthlyFee Int
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  students          Student[]
+
+  @@unique([centerId, name])
+}
+
+model Student {
+  id             String        @id @default(cuid())
+  centerId       String
+  center         Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  batchId        String
+  batch          Batch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  name           String
+  parentName     String?
+  parentPhone    String
+  status         StudentStatus @default(ACTIVE)
+  joinedOn       DateTime      @db.Date
+  leftOn         DateTime?     @db.Date
+  notes          String?
+  allowReminders Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  feeRule        FeeRule?
+  payments       Payment[]
+  attendance     Attendance[]
+  reminders      Reminder[]
+
+  @@index([centerId, status])
+  @@index([batchId])
+}
+
+model FeeRule {
+  id                String  @id @default(cuid())
+  studentId         String  @unique
+  student           Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  monthlyFee        Int? // null => use the batch default
+  discount          Int     @default(0) // flat ₹ off per month (e.g. sibling discount)
+  discountReason    String?
+  dueDay            Int     @default(5)
+  proRateFirstMonth Boolean @default(false) // for mid-month admissions
+}
+
+model Payment {
+  id        String      @id @default(cuid())
+  centerId  String
+  center    Center      @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount    Int
+  mode      PaymentMode
+  paidOn    DateTime    @db.Date
+  forMonth  String? // informational "linked month"; dues are computed FIFO from all payments
+  reference String?
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([centerId, paidOn])
+  @@index([studentId])
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  present   Boolean
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([date])
+}
+
+model Reminder {
+  id        String          @id @default(cuid())
+  centerId  String
+  center    Center          @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  month     String
+  type      ReminderType
+  channel   ReminderChannel
+  status    ReminderStatus  @default(PENDING)
+  amountDue Int
+  dueDate   DateTime        @db.Date
+  message   String
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime        @default(now())
+
+  // Idempotency key: one reminder per student + month + type, ever.
+  @@unique([studentId, month, type])
+  @@index([centerId, status])
+}

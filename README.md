@@ -38,11 +38,11 @@ Online payment gateway, exam and results management, multi-branch support, paren
  
 | Layer | Choice |
 |---|---|
-| Backend | _FastAPI / NestJS (update to your choice)_ |
+| Backend | NestJS 11 (TypeScript) + Prisma ORM |
 | Database | PostgreSQL |
-| Frontend | Mobile-first React |
+| Frontend | Mobile-first React 18 + Vite |
 | Messaging | WhatsApp Cloud API, with `wa.me` fallback |
-| Scheduler | Celery / cron |
+| Scheduler | `@nestjs/schedule` (daily, 9 AM IST) |
 | CI/CD | GitHub Actions |
 | Hosting | Render or Railway (backend), Vercel (frontend) |
  
@@ -74,35 +74,71 @@ See [`docs/design-doc.md`](docs/design-doc.md) for trade-offs in detail.
  
 ## Getting Started
  
+### Project layout
+
+```
+backend/    NestJS API (src/<module>/<module>.module.ts), Prisma schema + migrations, seed
+frontend/   React SPA (src/pages/*), Vite dev server proxies /api → :3000
+docs/       Design doc
+```
+
 ### Prerequisites
-- Docker and Docker Compose
-- Node.js / Python (match your stack)
-### Run locally
- 
+- Node.js 22+
+- PostgreSQL 14+ (local install, a free cloud DB such as Neon/Supabase, or Docker)
+
+### Run locally (without Docker)
+
 ```bash
 git clone https://github.com/<your-username>/tuition-center-manager.git
 cd tuition-center-manager
-cp .env.example .env        # fill in database and messaging credentials
-docker compose up --build
+
+# 1. API
+cd backend
+cp .env.example .env          # set DATABASE_URL (create the database first) and SECRET_KEY
+npm install
+npx prisma migrate deploy     # create tables
+npm run db:seed               # optional demo data — login demo@example.com / demo1234
+npm run dev                   # http://localhost:3000/api
+
+# 2. Web app (new terminal)
+cd frontend
+npm install
+npm run dev                   # http://localhost:5173  (also reachable from your phone on the same Wi-Fi)
 ```
- 
-The app will be available at `http://localhost:3000`.
- 
-### Run tests
- 
+
+### Run with Docker
+
 ```bash
-# update for your stack
-make test
+docker compose up --build     # web: http://localhost:8080, API: http://localhost:3000/api
 ```
- 
-### Environment variables
- 
+
+### Run tests
+
+```bash
+cd backend && npm test        # dues engine, reminder planner, message templates
+npm run typecheck             # backend and frontend both support this
+```
+
+### Environment variables (backend)
+
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `SECRET_KEY` | Session / JWT signing key |
+| `SECRET_KEY` | JWT signing key (required in production) |
+| `CORS_ORIGIN` | Allowed frontend origin(s), comma-separated |
+| `ENABLE_SCHEDULER` | `false` to disable the daily reminder job |
 | `WHATSAPP_TOKEN` | WhatsApp Cloud API token (optional) |
 | `WHATSAPP_PHONE_ID` | WhatsApp sender phone ID (optional) |
+| `WHATSAPP_TEMPLATE_BEFORE` / `_AFTER` | Approved template names with 5 body variables: parent, student, amount, due date, center (optional) |
+
+Without the WhatsApp variables, reminders are queued in the app and sent with one tap via `wa.me`.
+
+Frontend: `VITE_API_URL` — API base URL in production (e.g. `https://your-api.onrender.com/api`).
+
+### Deploy
+
+- **API → Render/Railway:** root `backend/`, build `npm install && npm run build`, start `npx prisma migrate deploy && npm start`; set the env vars above.
+- **Web → Vercel:** root `frontend/`, framework Vite, set `VITE_API_URL`; `vercel.json` handles SPA routing.
  
 ## Results
  
@@ -120,11 +156,11 @@ Measured with a real tuition center after _N_ weeks of daily use.
  
 ## Roadmap
  
-- [ ] Student, batch, and fee setup
-- [ ] Payment recording and dues dashboard
-- [ ] Reminder scheduler with idempotency
-- [ ] Attendance marking
-- [ ] Monthly reports (PDF / Excel)
+- [x] Student, batch, and fee setup
+- [x] Payment recording and dues dashboard
+- [x] Reminder scheduler with idempotency
+- [x] Attendance marking
+- [x] Monthly reports (PDF / Excel)
 - [ ] Deployment and weekly automated backups
 - [ ] Parent portal (future)
 - [ ] Online payment gateway (future)
